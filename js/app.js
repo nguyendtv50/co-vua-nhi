@@ -1650,6 +1650,42 @@
   /* Phụ huynh                                                            */
   /* ------------------------------------------------------------------ */
 
+  /* ---------------- Cài đặt giọng đọc ---------------- */
+
+  function voiceTip() {
+    const ua = navigator.userAgent;
+    const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (ios) return 'iPad/iPhone: vào <b>Cài đặt → Trợ năng → Nội dung được đọc → Giọng nói → Tiếng Việt</b>, tải giọng <b>Linh (Nâng cao)</b>, rồi mở lại app và chọn giọng đó ở trên.';
+    if (/Android/.test(ua)) return 'Android: vào <b>Cài đặt → Hệ thống → Ngôn ngữ → Chuyển văn bản thành giọng nói</b>, chọn <b>Google</b>, tải dữ liệu giọng <b>Tiếng Việt</b> chất lượng cao.';
+    if (/Edg\//.test(ua)) return 'Trên Edge, chọn giọng có chữ <b>"Natural"</b> (HoaiMy hoặc NamMinh) cho tự nhiên nhất. Giọng Natural cần có mạng; khi mất mạng phần mềm tự dùng giọng khác.';
+    return 'Trên máy tính, mở phần mềm bằng <b>Microsoft Edge</b> để có giọng đọc tự nhiên HoaiMy/NamMinh (Natural).';
+  }
+
+  function voiceSettingsHtml() {
+    const voices = Media.vietVoices();
+    const current = Media.vietVoice();
+    const rate = Progress.data.settings.voiceRate || 0.9;
+    const options = voices.map(v => `<option value="${esc(v.name)}" ${current && v.name === current.name ? 'selected' : ''}>${esc(v.name)}${/natural|neural|online|premium|enhanced|google/i.test(v.name) ? ' ⭐' : ''}</option>`).join('');
+    return `
+      <div class="voice-box">
+        ${voices.length ? `
+          <label class="check">Giọng đọc: <select id="voiceSelect">${options}</select></label>
+          <label class="check">Tốc độ: <input type="range" id="voiceRate" min="0.7" max="1.2" step="0.05" value="${rate}"> <span id="rateText">${rate.toFixed(2)}×</span></label>
+          <button class="btn" id="voiceTest">🔊 Nghe thử</button>` : ''}
+        <p class="note">💡 ${voiceTip()} Giọng có dấu ⭐ thường tự nhiên hơn.</p>
+      </div>`;
+  }
+
+  function bindVoiceSettings() {
+    const select = document.getElementById('voiceSelect');
+    if (!select) return;
+    const rate = document.getElementById('voiceRate');
+    select.addEventListener('change', () => { Progress.setSetting('voiceName', select.value); Media.preview(select.value, Number(rate.value)); });
+    rate.addEventListener('input', () => { document.getElementById('rateText').textContent = Number(rate.value).toFixed(2) + '×'; });
+    rate.addEventListener('change', () => Progress.setSetting('voiceRate', Number(rate.value)));
+    document.getElementById('voiceTest').addEventListener('click', () => Media.preview(select.value, Number(rate.value)));
+  }
+
   function renderParentGate() {
     const a = 6 + Math.floor(Math.random() * 4);
     const b = 6 + Math.floor(Math.random() * 4);
@@ -1766,7 +1802,8 @@
             : '⚠️ Stockfish chưa khởi động được trên máy này. Phần mềm vẫn chạy bằng máy phân tích đơn giản.'}</p>
           <label class="check"><input type="checkbox" data-setting="sound" ${d.settings.sound ? 'checked' : ''}> Âm thanh</label>
           <label class="check"><input type="checkbox" data-setting="voice" ${d.settings.voice ? 'checked' : ''}> Tự động đọc to đề bài
-            ${Media.canSpeak() ? '' : '<small>(máy này chưa có giọng đọc tiếng Việt, xem README)</small>'}</label>
+            ${Media.canSpeak() ? '' : '<small>(máy này chưa có giọng đọc tiếng Việt, xem hướng dẫn bên dưới)</small>'}</label>
+          ${voiceSettingsHtml()}
           <label class="check"><input type="checkbox" data-setting="hangingWarning" ${d.settings.hangingWarning ? 'checked' : ''}> Nhắc khi bé sắp để mất quân (lúc chơi với máy)</label>
           <div class="row">
             <button class="btn" id="exportBtn">💾 Sao lưu tiến độ</button>
@@ -1778,6 +1815,7 @@
     bindNav();
     document.getElementById('nameInput').addEventListener('change', e => { if (e.target.value.trim()) Progress.setName(e.target.value); });
     app.querySelectorAll('[data-setting]').forEach(cb => cb.addEventListener('change', () => Progress.setSetting(cb.dataset.setting, cb.checked)));
+    bindVoiceSettings();
     document.getElementById('exportBtn').addEventListener('click', () => {
       const blob = new Blob([Progress.exportJson()], { type: 'application/json' });
       const a = document.createElement('a');

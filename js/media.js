@@ -32,24 +32,102 @@
     }
   }
 
+  /* ---------------- Giọng đọc tiếng Việt ---------------- */
+
+  // Chấm điểm giọng: giọng "tự nhiên" (neural) của Edge, giọng Google, giọng nâng cao của iOS được ưu tiên;
+  // giọng "Microsoft An" kiểu cũ của Windows rất máy móc nên xếp cuối.
+  function voiceScore(v) {
+    const n = v.name.toLowerCase();
+    let s = 0;
+    if (/natural|neural|online/.test(n)) s += 100;
+    if (/premium/.test(n)) s += 90;
+    if (/enhanced|nâng cao/.test(n)) s += 80;
+    if (/google/.test(n)) s += 60;
+    if (/hoaimy|linh/.test(n)) s += 5; // giọng nữ, nhẹ nhàng hợp với trẻ
+    if (/microsoft an\b/.test(n)) s -= 20;
+    return s;
+  }
+
+  function vietVoices() {
+    if (!('speechSynthesis' in window)) return [];
+    return speechSynthesis.getVoices()
+      .filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('vi'))
+      .sort((a, b) => voiceScore(b) - voiceScore(a));
+  }
+
   function vietVoice() {
-    if (!('speechSynthesis' in window)) return null;
-    return speechSynthesis.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith('vi')) || null;
+    const voices = vietVoices();
+    const chosen = Progress.data.settings.voiceName;
+    return voices.find(v => v.name === chosen) || voices[0] || null;
   }
 
   function canSpeak() {
     return !!vietVoice();
   }
 
+  /* ---------------- Chuẩn bị câu đọc ---------------- */
+
+  const PIECE = { K: 'Vua', Q: 'Hậu', R: 'Xe', B: 'Tượng', N: 'Mã' };
+  // Đọc tên ô theo cách gọi quen thuộc của người Việt: "e4" → "e bốn".
+  const DIGIT = ['', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám'];
+  const FILE = { a: 'a', b: 'bê', c: 'xê', d: 'đê', e: 'e', f: 'ép', g: 'gờ', h: 'hát' };
+  const square = sq => `${FILE[sq[0]]} ${DIGIT[Number(sq[1])]}`;
+
+  /** Đổi ký hiệu nước đi (SAN) thành lời: "Nxf7+" → "Mã ăn ép bảy, chiếu". */
+  function sanToWords(_, piece, from, capture, to, promo, check) {
+    let s;
+    if (piece) s = `${PIECE[piece]} ${capture ? 'ăn' : 'đến'} ${square(to)}`;
+    else if (capture) s = `Tốt ${FILE[from[0]] || ''} ăn ${square(to)}`;
+    else s = square(to); // nước tốt thường (vd "e4") hoặc tên ô: chỉ cần đọc tên ô
+    if (promo) s += `, phong ${PIECE[promo[1]].toLowerCase()}`;
+    if (check === '+') s += ', chiếu';
+    if (check === '#') s += ', chiếu hết';
+    return s;
+  }
+
+  function prepareSpeech(text) {
+    return String(text)
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/O-O-O/g, 'nhập thành cánh hậu')
+      .replace(/O-O/g, 'nhập thành cánh vua')
+      .replace(/\b([KQRBN])?([a-h]?[1-8]?)(x)?([a-h][1-8])(=[QRBN])?([+#])?(?![\p{L}\d])/gu, (m, p, f, x, to, promo, chk) =>
+        // Chỉ đổi khi chắc chắn là ký hiệu cờ: có chữ quân, có "x", hoặc là tên một ô đơn lẻ.
+        (p || x || promo || chk || m === to) ? sanToWords(m, p, f, x, to, promo, chk) : m)
+      .replace(/\p{Extended_Pictographic}|️/gu, ' ')
+      .replace(/[→·]/g, ', ')
+      .replace(/(\d)\s*[–-]\s*(\d)/g, '$1 đến $2')
+      .replace(/×/g, ' nhân ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /** Tách thành từng câu để giọng đọc ngắt nghỉ tự nhiên (và tránh lỗi Chrome cắt câu dài). */
+  function sentences(text) {
+    return text.split(/(?<=[.!?…:;])\s+/).map(s => s.trim()).filter(s => /[\p{L}\d]/u.test(s));
+  }
+
+  function speakWith(text, voice, rate) {
+    speechSynthesis.cancel();
+    for (const part of sentences(prepareSpeech(text))) {
+      const u = new SpeechSynthesisUtterance(part);
+      u.voice = voice;
+      u.lang = voice.lang;
+      u.rate = rate;
+      u.pitch = 1.05;
+      speechSynthesis.speak(u);
+    }
+  }
+
   function speak(text) {
     const voice = vietVoice();
     if (!voice || !Progress.data.settings.voice) return;
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.voice = voice;
-    u.lang = voice.lang;
-    u.rate = 0.95;
-    speechSynthesis.speak(u);
+    speakWith(text, voice, Progress.data.settings.voiceRate || 0.9);
+  }
+
+  /** Nghe thử một giọng (dùng ở trang Phụ huynh), kể cả khi đang tắt tự đọc. */
+  function preview(name, rate) {
+    const voice = vietVoices().find(v => v.name === name) || vietVoice();
+    if (voice) speakWith('Chào con! Mã đi đến ép ba, tấn công tốt e năm. Nước đi Nxf7+ là mã ăn f7 và chiếu vua.', voice, rate);
   }
 
   function stopSpeaking() {
@@ -61,5 +139,5 @@
     speechSynthesis.addEventListener?.('voiceschanged', () => document.dispatchEvent(new Event('voices-ready')));
   }
 
-  window.Media = { play, speak, stopSpeaking, canSpeak };
+  window.Media = { play, speak, stopSpeaking, canSpeak, vietVoices, vietVoice, preview, prepareSpeech };
 })();

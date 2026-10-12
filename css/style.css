@@ -414,6 +414,10 @@ th { color: var(--muted); }
 .moves-line { font-family: Consolas, monospace; margin: 0; }
 .tag { font-size: 0.8rem; background: #fff1c2; padding: 2px 8px; border-radius: 99px; margin-left: 6px; }
 
+.voice-box { margin: 6px 0 12px 32px; }
+.voice-box select { font: inherit; padding: 8px 10px; border-radius: 10px; border: 2px solid #e6dccb; max-width: 100%; }
+.voice-box input[type="range"] { width: 160px; }
+
 /* ---------- Sổ ôn tập ---------- */
 .notebook { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
 .notebook .big { font-size: 2.4rem; }

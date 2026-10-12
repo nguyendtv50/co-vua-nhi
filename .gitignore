@@ -1,0 +1,13 @@
+# Cấu hình riêng của máy phát triển
+.claude/
+
+# File sao lưu tiến độ của bé (có tên và kết quả học) – KHÔNG đưa lên mạng
+co-vua-nhi-*.json
+*.json
+!manifest.webmanifest
+
+# File đóng gói, tạo lại bằng tools/build_release.py
+CoVuaNhi.zip
+
+__pycache__/
+*.pyc

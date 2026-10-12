@@ -1,0 +1,17 @@
+{
+  "name": "Cờ Vua Nhí",
+  "short_name": "Cờ Vua Nhí",
+  "description": "Học cờ vua bài bản cho trẻ em: bài học, bài tập, khai cuộc, xem lại ván với Stockfish.",
+  "lang": "vi",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff8ec",
+  "theme_color": "#ff8a3d",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

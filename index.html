@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cờ Vua Nhí</title>
+  <!-- Cài lên màn hình chính iPad/iPhone/Android (ứng dụng web – PWA) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#ff8a3d">
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cờ Vua Nhí">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- "?v=5": số phiên bản, tăng lên mỗi lần cập nhật để trình duyệt không dùng bản cũ trong bộ nhớ đệm. -->
+  <link rel="stylesheet" href="css/style.css?v=5">
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>Cần bật JavaScript để dùng Cờ Vua Nhí.</noscript>
+
+  <!-- Script thường (không dùng module) để mở được bằng cách nhấp đúp file, không cần máy chủ. -->
+  <script src="vendor/chess.global.js?v=5"></script>
+  <script src="js/curriculum.js?v=5"></script>
+  <script src="js/puzzles.js?v=5"></script>
+  <script src="js/openings.js?v=5"></script>
+  <script src="js/progress.js?v=5"></script>
+  <script src="js/media.js?v=5"></script>
+  <script src="js/bot.js?v=5"></script>
+  <script src="js/board.js?v=5"></script>
+  <script src="js/explain.js?v=5"></script>
+  <script src="vendor/stockfish.src.js?v=5"></script>
+  <script src="js/engine.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
+</body>
+</html>

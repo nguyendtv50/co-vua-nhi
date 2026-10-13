@@ -13,12 +13,24 @@ import sys
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-INCLUDE = ["index.html", "manifest.webmanifest", "sw.js", "README.md", "css", "js", "vendor", "assets"]
+INCLUDE = ["index.html", "manifest.webmanifest", "sw.js", "README.md", "css", "js", "vendor", "assets", "audio"]
 
 SW_TEMPLATE = """/* Bộ nhớ offline của Cờ Vua Nhí – TẠO TỰ ĐỘNG bởi tools/build_release.py, đừng sửa tay. */
 const VERSION = '__VERSION__';
 const CACHE = 'covuanhi-v' + VERSION;
 const FILES = __FILES__;
+// Bản thu giọng AI: tải ngầm sau khi app đã chạy (app gửi tin nhắn 'cache-audio'), để lần mở đầu không phải chờ.
+const AUDIO = __AUDIO__;
+
+self.addEventListener('message', event => {
+  if (event.data !== 'cache-audio') return;
+  event.waitUntil(caches.open(CACHE).then(async cache => {
+    for (const url of AUDIO) {
+      if (await cache.match(url)) continue;
+      try { await cache.add(url); } catch (e) { /* mất mạng giữa chừng: lần sau tải tiếp */ }
+    }
+  }));
+});
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
@@ -66,7 +78,10 @@ def main(version):
             if path.is_file():
                 rel = path.relative_to(ROOT).as_posix()
                 files.append(f"{rel}?v={version}" if rel in versioned else rel)
-    sw = SW_TEMPLATE.replace("__VERSION__", str(version)).replace("__FILES__", json.dumps(files, indent=2))
+    audio = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "audio").glob("*.mp3")) if (ROOT / "audio").exists() else []
+    sw = (SW_TEMPLATE.replace("__VERSION__", str(version))
+          .replace("__FILES__", json.dumps(files, indent=2))
+          .replace("__AUDIO__", json.dumps(audio)))
     (ROOT / "sw.js").write_text(sw, encoding="utf-8")
 
     with zipfile.ZipFile(ROOT / "CoVuaNhi.zip", "w", zipfile.ZIP_DEFLATED) as z:
@@ -76,7 +91,7 @@ def main(version):
                 if path.is_file():
                     z.write(path, path.relative_to(ROOT).as_posix())
 
-    print(f"Phiên bản {version}: sw.js lưu offline {len(files)} file; đã tạo CoVuaNhi.zip "
+    print(f"Phiên bản {version}: sw.js lưu offline {len(files)} file + {len(audio)} bản thu giọng; đã tạo CoVuaNhi.zip "
           f"({(ROOT / 'CoVuaNhi.zip').stat().st_size // 1024} KB).")
 
 

@@ -32,7 +32,7 @@ window.CURRICULUM = {
         { "type": "move", "fen": "r3k2r/pppq1ppp/2npbn2/2b1p3/2B1P3/2NPBN2/PPPQ1PPP/R3K2R w KQkq - 0 1", "prompt": "Hãy nhập thành cánh vua (về phía bên phải). Chạm vào vua rồi chạm vào ô g1.", "answers": ["e1g1"], "hint": "e1" },
         { "type": "move", "fen": "r3k2r/pppq1ppp/2npbn2/2b1p3/2B1P3/2NPBN2/PPPQ1PPP/R3K2R w KQkq - 0 1", "prompt": "Bây giờ hãy nhập thành cánh hậu (về phía bên trái).", "answers": ["e1c1"], "hint": "e1" },
         { "type": "quiz", "question": "Vua đang bị chiếu thì có được nhập thành không?", "choices": ["Được", "Không được"], "answer": 1, "explain": "Đúng rồi! Khi bị chiếu phải thoát chiếu trước, không được nhập thành." },
-        { "type": "move", "fen": "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2", "prompt": "Tốt Đen vừa đi 2 ô từ d7 xuống d5. Hãy bắt tốt qua đường!", "answers": ["e5d6"], "hint": "e5" },
+        { "type": "move", "fen": "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2", "prompt": "Tốt Đen vừa đi 2 ô từ d7 xuống d5. Hãy bắt tốt qua đường!", "answers": ["e5d6"], "hint": "e5", "wrongHint": "Chưa đúng rồi! Tốt e5 được ăn tốt d5 như thể tốt đen chỉ đi 1 ô đến d6. Chạm vào tốt e5 rồi chạm vào ô trống d6 nhé.", "explain": "Tốt trắng đi chéo lên ô d6, và tốt đen ở d5 bị ăn mất. Nhớ nhé: chỉ được bắt qua đường ngay nước tiếp theo, chậm một nước là mất quyền!" },
         { "type": "move", "fen": "4k3/1P6/8/8/8/8/8/4K3 w - - 0 1", "prompt": "Đưa tốt lên hàng cuối để phong hậu!", "answers": ["b7b8q"], "hint": "b7" },
         { "type": "quiz", "fen": "k7/8/1Q6/8/8/8/8/K7 b - - 0 1", "verify": "stalemate", "question": "Đến lượt Đen đi. Đây là gì?", "choices": ["Chiếu hết – Trắng thắng", "Hòa pat – hai bên hòa", "Đen vẫn còn nước đi"], "answer": 1, "explain": "Vua Đen không bị chiếu nhưng không còn ô nào để đi, nên là hòa pat." },
         { "type": "quiz", "fen": "R5k1/5ppp/8/8/8/8/8/6K1 b - - 0 1", "verify": "checkmate", "question": "Đến lượt Đen đi. Đây là gì?", "choices": ["Chiếu hết – Trắng thắng", "Hòa pat – hai bên hòa", "Đen vẫn còn nước đi"], "answer": 0, "explain": "Vua bị xe chiếu và các tốt Đen chặn đường thoát: chiếu hết!" }
@@ -124,7 +124,8 @@ window.CURRICULUM = {
         { "type": "move", "fen": "4k3/8/2p5/3n4/r7/8/8/3QK3 w - - 0 1", "prompt": "Hậu Trắng ăn được 2 quân. Quân nào ăn được an toàn?", "answers": ["d1a4"], "wrongHint": "Mã d5 được tốt c6 bảo vệ. Ăn mã thì sẽ mất hậu!" },
         { "type": "find", "mode": "hanging", "fen": "4k3/1p3p2/2n5/6b1/3r4/8/8/4K3 w - - 0 1", "prompt": "Chạm vào TẤT CẢ quân Đen không được bảo vệ, rồi bấm Xong.", "answers": ["b7", "g5"] },
         { "type": "find", "mode": "hanging", "fen": "r3k3/8/3p4/4n3/8/1b6/8/4K3 w - - 0 1", "prompt": "Chạm vào TẤT CẢ quân Đen bị treo, rồi bấm Xong.", "answers": ["a8", "d6", "b3"] },
-        { "type": "quiz", "fen": "r1bqkbnr/pppp1ppp/2n5/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR w KQkq - 2 3", "question": "Hậu Trắng có nên ăn tốt e5 không?", "choices": ["Nên, được thêm tốt", "Không nên, mã c6 sẽ ăn lại hậu"], "answer": 1, "explain": "Tốt e5 được mã c6 bảo vệ. Đổi hậu lấy tốt là thiệt rất nặng!" }
+        { "type": "quiz", "fen": "r1bqkbnr/pppp1ppp/2n5/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR w KQkq - 2 3", "question": "Hậu Trắng có nên ăn tốt e5 không?", "choices": ["Nên, được thêm tốt", "Không nên, mã c6 sẽ ăn lại hậu"], "answer": 1, "explain": "Tốt e5 được mã c6 bảo vệ. Đổi hậu lấy tốt là thiệt rất nặng!" },
+        { "type": "pack", "pack": "hanging", "count": 5 }
       ]
     },
     {
@@ -148,7 +149,8 @@ window.CURRICULUM = {
         { "type": "mate1", "fen": "5rk1/5pp1/8/7Q/8/3B4/8/6K1 w - - 0 1", "prompt": "Hậu và tượng phối hợp. Chiếu hết!" },
         { "type": "mate1", "fen": "6rk/6pp/8/6N1/8/8/8/6K1 w - - 0 1", "prompt": "Mã ngộp thở: vua bị chính quân mình vây kín!" },
         { "type": "mate1", "fen": "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4", "prompt": "Ô f7 rất yếu! Chiếu hết trong 1 nước." },
-        { "type": "mate1", "fen": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2", "prompt": "Lượt của Đen! Trắng đi tốt quá ẩu. Hãy chiếu hết." }
+        { "type": "mate1", "fen": "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2", "prompt": "Lượt của Đen! Trắng đi tốt quá ẩu. Hãy chiếu hết." },
+        { "type": "pack", "pack": "mate1", "count": 5 }
       ]
     },
     {
@@ -170,7 +172,8 @@ window.CURRICULUM = {
         { "type": "move", "fen": "4k3/8/1q3r2/8/8/4N3/8/4K3 w - - 0 1", "prompt": "Tìm ô để mã tấn công cả hậu và xe!", "answers": ["e3d5"] },
         { "type": "move", "fen": "4k3/8/8/2n1b3/8/2PP4/8/4K3 w - - 0 1", "prompt": "Tốt cũng chĩa đôi được! Tốt nào tấn công cả mã và tượng?", "answers": ["d3d4"] },
         { "type": "move", "fen": "4k3/8/8/8/7r/8/8/3QK3 w - - 0 1", "prompt": "Hậu chĩa đôi: vừa chiếu vua, vừa tấn công xe!", "answers": ["d1a4"] },
-        { "type": "move", "fen": "2r3k1/8/8/3N4/8/8/8/6K1 w - - 0 1", "prompt": "Mã chiếu vua và tấn công xe cùng lúc!", "answers": ["d5e7"] }
+        { "type": "move", "fen": "2r3k1/8/8/3N4/8/8/8/6K1 w - - 0 1", "prompt": "Mã chiếu vua và tấn công xe cùng lúc!", "answers": ["d5e7"] },
+        { "type": "pack", "pack": "fork", "count": 6 }
       ]
     },
     {
@@ -191,7 +194,8 @@ window.CURRICULUM = {
         { "type": "quiz", "fen": "4k3/8/2n5/1B6/8/8/8/4K3 b - - 0 1", "question": "Đến lượt Đen. Mã c6 có được đi không?", "choices": ["Được", "Không, vì mã đang bị ghim vào vua"], "answer": 1, "explain": "Nếu mã đi, tượng sẽ chiếu vua. Luật không cho phép tự để vua bị chiếu." },
         { "type": "move", "fen": "4k3/8/2n5/1B6/3P4/8/8/4K3 w - - 0 1", "prompt": "Mã bị ghim không chạy được. Tấn công nó bằng tốt!", "answers": ["d4d5"] },
         { "type": "move", "fen": "4k3/3q4/8/8/P7/8/8/4KB2 w - - 0 1", "prompt": "Ghim hậu Đen vào vua! (Tốt a4 sẽ bảo vệ tượng.)", "answers": ["f1b5"] },
-        { "type": "move", "fen": "4k3/8/8/4b3/8/8/8/1K5R w - - 0 1", "prompt": "Dùng xe ghim tượng Đen vào vua!", "answers": ["h1e1"] }
+        { "type": "move", "fen": "4k3/8/8/4b3/8/8/8/1K5R w - - 0 1", "prompt": "Dùng xe ghim tượng Đen vào vua!", "answers": ["h1e1"] },
+        { "type": "pack", "pack": "pinskewer", "count": 6 }
       ]
     },
     {
@@ -211,7 +215,8 @@ window.CURRICULUM = {
         { "type": "move", "fen": "r7/8/8/3k4/8/8/8/3BK3 w - - 0 1", "prompt": "Xiên: tượng chiếu vua, vua chạy, rồi tượng ăn xe phía sau!", "answers": ["d1f3"] },
         { "type": "move", "fen": "3q4/8/8/8/3k4/8/8/R5K1 w - - 0 1", "prompt": "Xiên bằng xe: chiếu vua để ăn hậu phía sau!", "answers": ["a1d1"] },
         { "type": "move", "fen": "4k3/8/8/8/4N3/8/3q4/4R1K1 w - - 0 1", "prompt": "Tấn công phát hiện: mã ăn hậu, đồng thời xe lộ ra chiếu vua!", "answers": ["e4d2"] },
-        { "type": "move", "fen": "r3k3/8/8/8/4B3/8/8/4R1K1 w - - 0 1", "prompt": "Tượng đi ăn quân và xe lộ ra chiếu vua cùng lúc!", "answers": ["e4a8"] }
+        { "type": "move", "fen": "r3k3/8/8/8/4B3/8/8/4R1K1 w - - 0 1", "prompt": "Tượng đi ăn quân và xe lộ ra chiếu vua cùng lúc!", "answers": ["e4a8"] },
+        { "type": "pack", "pack": "discovered", "count": 5 }
       ]
     },
     {
@@ -496,6 +501,38 @@ window.CURRICULUM = {
       ],
       "exercises": [
         { "type": "pack", "pack": "quiet", "count": 8 }
+      ]
+    },
+    {
+      "id": "thiquan",
+      "icon": "🎁",
+      "title": "Thí quân để thắng",
+      "month": 5,
+      "week": "Tuần 23",
+      "goal": "Dám cho đi một quân để đổi lấy chiếu hết hoặc lời nhiều quân hơn.",
+      "intro": [
+        "Thí quân là cố ý cho đối thủ ăn một quân của mình.",
+        "Nghe thì lạ, nhưng nếu sau đó mình chiếu hết được, hoặc ăn lại được quân to hơn, thì thí quân là nước tuyệt hay!",
+        "Trước khi thí, con hãy đếm thật kỹ: đối thủ ăn xong thì mình đi tiếp nước gì?"
+      ],
+      "exercises": [
+        { "type": "pack", "pack": "sacrifice", "count": 10 }
+      ]
+    },
+    {
+      "id": "xuyenquan",
+      "icon": "🔦",
+      "title": "Tấn công xuyên quân và chặn đường",
+      "month": 5,
+      "week": "Tuần 23",
+      "goal": "Nhìn xuyên qua quân cờ và cắt đường liên lạc của quân đối thủ.",
+      "intro": [
+        "Tấn công xuyên quân: xe, tượng, hậu nhìn xuyên qua một quân để tấn công hoặc bảo vệ ô phía sau.",
+        "Chặn đường: đặt một quân vào giữa, cắt đứt đường bảo vệ giữa hai quân của đối thủ.",
+        "Đây là các đòn khó. Con hãy nhìn theo từng đường thẳng và đường chéo nhé!"
+      ],
+      "exercises": [
+        { "type": "pack", "pack": "xray", "count": 8 }
       ]
     },
     {

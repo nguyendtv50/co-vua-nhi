@@ -28,22 +28,26 @@ BAND = 100             # chia độ khó theo khoảng 100 điểm để bài tr
 
 # (mã gói, chủ đề cần có (một trong số), điểm thấp nhất, điểm cao nhất, số bài)
 PACKS = [
-    ("mate2", {"mateIn2"}, 600, 1500, 40),
+    ("mate2", {"mateIn2"}, 600, 1500, 100),
     ("matepatterns", {"backRankMate", "smotheredMate", "anastasiaMate", "arabianMate", "hookMate",
-                      "bodenMate", "doubleBishopMate", "dovetailMate"}, 500, 1500, 40),
-    ("mate3", {"mateIn3"}, 800, 1700, 30),
-    ("attack", {"kingsideAttack", "exposedKing"}, 700, 1500, 30),
-    ("fork", {"fork"}, 600, 1400, 40),
-    ("pinskewer", {"pin", "skewer"}, 600, 1400, 40),
-    ("discovered", {"discoveredAttack", "doubleCheck"}, 600, 1500, 30),
-    ("deflection", {"deflection", "attraction"}, 700, 1500, 30),
-    ("defender", {"capturingDefender", "trappedPiece"}, 600, 1400, 30),
-    ("quiet", {"intermezzo", "quietMove", "clearance"}, 900, 1700, 24),
-    ("opening", {"opening"}, 500, 1300, 30),
-    ("pawnend", {"pawnEndgame"}, 500, 1500, 30),
-    ("promotion", {"promotion", "advancedPawn"}, 500, 1400, 30),
-    ("rookend", {"rookEndgame"}, 600, 1500, 30),
-    ("defense", {"defensiveMove"}, 700, 1500, 24),
+                      "bodenMate", "doubleBishopMate", "dovetailMate"}, 500, 1500, 80),
+    ("mate3", {"mateIn3"}, 800, 1700, 60),
+    ("attack", {"kingsideAttack", "exposedKing"}, 700, 1500, 80),
+    ("fork", {"fork"}, 400, 1500, 150),
+    ("pinskewer", {"pin", "skewer"}, 400, 1500, 150),
+    ("discovered", {"discoveredAttack", "doubleCheck"}, 500, 1500, 100),
+    ("deflection", {"deflection", "attraction"}, 600, 1600, 90),
+    ("defender", {"capturingDefender", "trappedPiece"}, 500, 1500, 90),
+    ("quiet", {"intermezzo", "quietMove", "clearance"}, 900, 1700, 50),
+    ("opening", {"opening"}, 500, 1300, 50),
+    ("pawnend", {"pawnEndgame"}, 500, 1500, 40),
+    ("promotion", {"promotion", "advancedPawn"}, 500, 1400, 50),
+    ("rookend", {"rookEndgame"}, 600, 1500, 40),
+    ("defense", {"defensiveMove"}, 700, 1500, 50),
+    ("hanging", {"hangingPiece"}, 400, 1200, 100),
+    ("sacrifice", {"sacrifice"}, 700, 1600, 60),
+    ("xray", {"xRayAttack", "interference"}, 800, 1700, 40),
+    ("mate1", {"mateIn1"}, 400, 1100, 80),
 ]
 POOL_RANGE = (400, 1800)
 POOL_PER_BAND = 140    # kho luyện tập thích ứng theo điểm của bé
@@ -86,6 +90,18 @@ def main(path):
     used = set()
     seen = 0
 
+    # Giữ nguyên các bài đã có (tiến độ của bé lưu theo mã bài), chỉ bổ sung bài mới cho đủ số lượng.
+    if OUT.exists():
+        old = json.loads(OUT.read_text(encoding="utf-8").split("window.PUZZLES =", 1)[1].strip().rstrip(";"))
+        for pack_id, items in old["packs"].items():
+            for item in items:
+                used.add(item[0])
+                if pack_id in packs:
+                    packs[pack_id]["bands"].setdefault(band_of(item[3]), []).append(item)
+        for item in old["pool"]:
+            used.add(item[0])
+            pool.setdefault(band_of(item[3]), []).append(item)
+
     with open(path, "rb") as fh:
         reader = zstandard.ZstdDecompressor().stream_reader(fh)
         text = io.TextIOWrapper(reader, encoding="utf-8", newline="")
@@ -108,12 +124,14 @@ def main(path):
                 continue
             themes = set(row[col["Themes"]].split())
             pid = row[col["PuzzleId"]]
+            if pid in used:
+                continue
             item = None
 
             for pack_id, p in packs.items():
                 if not (p["lo"] <= rating < p["hi"]) or not (themes & p["need"]):
                     continue
-                bucket = p["bands"][band_of(rating)]
+                bucket = p["bands"].setdefault(band_of(rating), [])
                 if len(bucket) >= p["per_band"]:
                     continue
                 item = item or make_item(pid, row[col["FEN"]], moves, rating, themes)
@@ -124,13 +142,14 @@ def main(path):
                 break
 
             if pid not in used and POOL_RANGE[0] <= rating < POOL_RANGE[1]:
-                bucket = pool[band_of(rating)]
+                bucket = pool.setdefault(band_of(rating), [])
                 if len(bucket) < POOL_PER_BAND:
                     item = item or make_item(pid, row[col["FEN"]], moves, rating, themes)
                     if item is not None:
                         bucket.append(item)
 
-            if seen % 20000 == 0 and all(len(b) >= p["per_band"] for p in packs.values() for b in p["bands"].values()) \
+            if seen % 20000 == 0 and all(len(p["bands"].get(b, [])) >= p["per_band"]
+                                         for p in packs.values() for b in bands(p["lo"], p["hi"])) \
                     and all(len(b) >= POOL_PER_BAND for b in pool.values()):
                 break
 

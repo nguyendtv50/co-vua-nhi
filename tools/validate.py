@@ -152,6 +152,8 @@ def check_openings(errors):
             moves = line["moves"].split()
             if len(moves) != len(line["notes"]):
                 errors.append(f"{where}: {len(moves)} nước nhưng có {len(line['notes'])} lời giải thích")
+            if not line.get("idea") or not line.get("tips"):
+                errors.append(f"{where}: thiếu ý tưởng chính (idea) hoặc mẹo nhớ (tips)")
             board = chess.Board()
             for san in moves:
                 try:

@@ -1,23 +1,24 @@
 /* Bộ nhớ offline của Cờ Vua Nhí – TẠO TỰ ĐỘNG bởi tools/build_release.py, đừng sửa tay. */
-const VERSION = '7';
+const VERSION = '9';
 const CACHE = 'covuanhi-v' + VERSION;
 const FILES = [
   "./",
   "index.html",
   "manifest.webmanifest",
-  "css/style.css?v=7",
-  "js/app.js?v=7",
-  "js/board.js?v=7",
-  "js/bot.js?v=7",
-  "js/curriculum.js?v=7",
-  "js/engine.js?v=7",
-  "js/explain.js?v=7",
-  "js/media.js?v=7",
-  "js/openings.js?v=7",
-  "js/progress.js?v=7",
-  "js/puzzles.js?v=7",
-  "vendor/chess.global.js?v=7",
-  "vendor/stockfish.src.js?v=7",
+  "css/style.css?v=9",
+  "js/app.js?v=9",
+  "js/audio-index.js?v=9",
+  "js/board.js?v=9",
+  "js/bot.js?v=9",
+  "js/curriculum.js?v=9",
+  "js/engine.js?v=9",
+  "js/explain.js?v=9",
+  "js/media.js?v=9",
+  "js/openings.js?v=9",
+  "js/progress.js?v=9",
+  "js/puzzles.js?v=9",
+  "vendor/chess.global.js?v=9",
+  "vendor/stockfish.src.js?v=9",
   "assets/icons/apple-touch-icon.png",
   "assets/icons/icon-192.png",
   "assets/icons/icon-512.png",
@@ -35,6 +36,18 @@ const FILES = [
   "assets/pieces/wQ.svg",
   "assets/pieces/wR.svg"
 ];
+// Bản thu giọng AI: tải ngầm sau khi app đã chạy (app gửi tin nhắn 'cache-audio'), để lần mở đầu không phải chờ.
+const AUDIO = [];
+
+self.addEventListener('message', event => {
+  if (event.data !== 'cache-audio') return;
+  event.waitUntil(caches.open(CACHE).then(async cache => {
+    for (const url of AUDIO) {
+      if (await cache.match(url)) continue;
+      try { await cache.add(url); } catch (e) { /* mất mạng giữa chừng: lần sau tải tiếp */ }
+    }
+  }));
+});
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));

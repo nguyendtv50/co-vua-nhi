@@ -46,7 +46,7 @@
   // Nút 🔊 ở bất kỳ đâu trên trang.
   app.addEventListener('click', e => {
     const btn = e.target.closest('[data-say]');
-    if (btn) Media.speak(btn.dataset.say);
+    if (btn) Media.speak(btn.dataset.say, true); // bấm 🔊 thì luôn đọc, kể cả khi tắt tự động đọc
   });
 
   function starsHtml(n, max = 3) {
@@ -74,6 +74,14 @@
   /* ------------------------------------------------------------------ */
   /* Công cụ cờ                                                          */
   /* ------------------------------------------------------------------ */
+
+  /** Từ ô bắt qua đường trong FEN (vd "d6") suy ra nước tốt vừa đi 2 ô (d7→d5); không có thì [null, null]. */
+  function epLastMove(fen) {
+    const ep = fen.split(' ')[3];
+    if (!ep || ep === '-') return [null, null];
+    const up = ep[1] === '6' ? 1 : -1;
+    return [ep[0] + (Number(ep[1]) + up), ep[0] + (Number(ep[1]) - up)];
+  }
 
   function matchesAnswer(uci, mv) {
     if (uci.slice(0, 2) !== mv.from || uci.slice(2, 4) !== mv.to) return false;
@@ -203,7 +211,7 @@
       </header>
       <nav class="tabs">
         ${tab('home', '🗺️ Lộ trình')}
-        ${tab('practice', '🎯 Luyện tập')}
+        ${tab('train', '🎯 Luyện tập')}
         ${tab('openings', '📚 Khai cuộc')}
         ${tab('play', '♟️ Chơi với máy')}
         ${tab('parent', '👨‍👩‍👧 Phụ huynh')}
@@ -217,6 +225,7 @@
   function go(where) {
     if (where === 'home') renderHome();
     else if (where === 'practice') startPractice();
+    else if (where === 'train') renderTraining();
     else if (where === 'openings') renderOpenings();
     else if (where === 'play') renderPlaySetup();
     else if (where === 'parent') renderParentGate();
@@ -462,10 +471,16 @@
     next();
   }
 
-  function setPrompt(ui, text) {
-    const plain = text.replace(/<[^>]+>/g, '');
+  /** Hiện đề bài; `say` là câu đọc to nếu khác chữ hiển thị (vd. bỏ bớt số độ khó cho dễ nghe). */
+  function setPrompt(ui, text, say) {
+    const plain = (say || text).replace(/<[^>]+>/g, '');
     ui.prompt.innerHTML = `<span>${text}</span> ${speakButton(plain)}`;
     if (Progress.data.settings.voice) Media.speak(plain);
+  }
+
+  // Lời khen/động viên được đọc to (có bản thu sẵn giọng AI).
+  function sayPraise(text, extra) {
+    if (Progress.data.settings.voice) Media.speak(extra ? `${text} ${extra}` : text);
   }
 
   function feedback(ui, kind, text) {
@@ -557,7 +572,9 @@
           btn.classList.add('right');
           ui.choices.querySelectorAll('.choice').forEach(b => (b.disabled = true));
           Media.play('good');
-          feedback(ui, 'good', `${pick(PRAISE)}<br>${ex.explain || ''}`);
+          const praise = pick(PRAISE);
+          feedback(ui, 'good', `${praise}<br>${ex.explain || ''}`);
+          sayPraise(praise, ex.explain);
           ctx.solved(wrong === 0);
         } else {
           wrong++;
@@ -565,7 +582,9 @@
           btn.classList.add('wrong');
           btn.disabled = true;
           Media.play('bad');
-          feedback(ui, 'bad', pick(ENCOURAGE));
+          const enc = pick(ENCOURAGE);
+          feedback(ui, 'bad', enc);
+          sayPraise(enc);
         }
       }));
     },
@@ -616,6 +635,12 @@
     line(ex, ctx) { lineExercise(ex, ctx); }
   };
 
+  // Câu đọc to khi học khai cuộc (tools/collect_speech.html tạo đúng các câu này để thu sẵn).
+  function openingSpeech(who, san, note) {
+    return who === 'player' ? `Hãy đi ${san}. ${note}` : `Đối thủ đi ${san}. ${note}`;
+  }
+  window.CoVuaNhiSpeech = { openingSpeech, puzzleSpeech: (themes, player) => puzzleSpeech({ themes }, player), PRAISE, ENCOURAGE };
+
   function findLine(lineId) {
     for (const rep of OPENINGS) {
       const line = rep.lines.find(l => l.id === lineId);
@@ -638,7 +663,9 @@
     let step = 0;
     let wrong = 0;
     let timer = null;
-    cleanup = () => clearTimeout(timer);
+    let alive = true;
+    cleanup = () => { alive = false; clearTimeout(timer); };
+    const say = text => Media.speakAfter(text); // đọc nối tiếp, như thầy giảng từng ý
 
     const board = new Board(ui.boardEl, {
       game, orientation: player,
@@ -646,11 +673,19 @@
       onMove
     });
 
+    // Khung giải thích: ý tưởng chính + mẹo (cố định) và các nước đã đi (cập nhật dần).
+    ui.explain.innerHTML = `
+      <div class="line-idea">
+        <p>💡 <b>Ý tưởng chính:</b> ${line.idea} ${speakButton(`Ý tưởng chính: ${line.idea}`)}</p>
+        <p><b>Mẹo nhớ:</b></p><ul>${line.tips.map(t => `<li>${t}</li>`).join('')}</ul>
+      </div>
+      <p class="moves-line" id="lineMoves">…</p>`;
+
     function moveList() {
       const h = game.history();
       let s = '';
       for (let i = 0; i < h.length; i += 2) s += `${i / 2 + 1}. ${h[i]} ${h[i + 1] || ''} `;
-      ui.explain.innerHTML = `<p class="moves-line">${s || '…'}</p>`;
+      document.getElementById('lineMoves').textContent = s || '…';
     }
 
     function expected() {
@@ -658,37 +693,50 @@
       return g.move(sans[step]);
     }
 
+    function finish() {
+      board.locked = true;
+      const clean = wrong === 0;
+      if (!learn) Progress.recordOpening(line.id, clean);
+      Media.play('good');
+      const msg = learn
+        ? 'Con đã đi hết thế khai cuộc! Lần sau hãy thử chế độ Kiểm tra, tự nhớ các nước nhé.'
+        : clean ? 'Thuộc lắm! Không sai nước nào.' : `Xong rồi! Con sai ${wrong} lần, hãy ôn lại thêm nhé.`;
+      feedback(ui, 'good', msg + (learn ? ' 🎉' : clean ? ' 🏆' : ''));
+      say(msg);
+      if (learn) say(`Mẹo nhớ. ${line.tips.join(' ')}`);
+      ctx.solved(clean);
+    }
+
+    // Lượt đối thủ: đợi thầy giảng xong rồi mới đi, sau đó giảng nước của đối thủ.
+    async function opponentTurn() {
+      board.locked = true;
+      await Media.whenIdle();
+      await new Promise(r => { timer = setTimeout(r, 600); });
+      if (!alive) return;
+      const m = game.move(sans[step]);
+      board.setLastMove(m.from, m.to);
+      board.render();
+      Media.play('move');
+      const oppSpeech = openingSpeech('opponent', m.san, line.notes[step]);
+      feedback(ui, 'info', `🤖 Đối thủ đi <b>${m.san}</b>: ${line.notes[step]} ${speakButton(oppSpeech)}`);
+      say(oppSpeech);
+      step++;
+      board.locked = false;
+      advance();
+    }
+
     function advance() {
       moveList();
-      if (step >= sans.length) {
-        board.locked = true;
-        const clean = wrong === 0;
-        if (!learn) Progress.recordOpening(line.id, clean);
-        Media.play('good');
-        feedback(ui, 'good', learn
-          ? 'Con đã đi hết thế khai cuộc! Lần sau hãy thử chế độ Kiểm tra, tự nhớ các nước nhé. 🎉'
-          : clean ? 'Thuộc lắm! Không sai nước nào. 🏆' : `Xong rồi! Con sai ${wrong} lần, hãy ôn lại thêm nhé.`);
-        ctx.solved(clean);
-        return;
-      }
-      if (game.turn() !== player) {
-        board.locked = true;
-        timer = setTimeout(() => {
-          const m = game.move(sans[step]);
-          board.setLastMove(m.from, m.to);
-          board.render();
-          Media.play('move');
-          feedback(ui, 'info', `🤖 Đối thủ đi <b>${m.san}</b>: ${line.notes[step]}`);
-          step++;
-          board.locked = false;
-          advance();
-        }, 700);
-        return;
-      }
+      if (step >= sans.length) { finish(); return; }
+      if (game.turn() !== player) { opponentTurn(); return; }
       if (learn) {
+        // Chế độ Học: thầy chỉ nước cần đi, đánh dấu ô xuất phát (khung vàng) và ô đích (vòng xanh).
         const e = expected();
+        board.marks = new Set([e.to]);
         board.setHint(e.from);
-        ui.prompt.innerHTML = `Hãy đi <b>${e.san}</b> (từ ${e.from} đến ${e.to}): ${line.notes[step]}`;
+        const mySpeech = openingSpeech('player', e.san, line.notes[step]);
+        ui.prompt.innerHTML = `Hãy đi <b>${e.san}</b> (từ ${e.from} đến ${e.to}): ${line.notes[step]} ${speakButton(mySpeech)}`;
+        say(mySpeech);
       }
     }
 
@@ -696,10 +744,14 @@
       const e = expected();
       if (mv.from === e.from && mv.to === e.to) {
         const m = game.move(mv);
+        board.marks = new Set();
         board.setLastMove(m.from, m.to);
         board.setHint(null);
         Media.play('move');
-        feedback(ui, 'good', `✅ <b>${m.san}</b>: ${line.notes[step]}`);
+        feedback(ui, 'good', `✅ <b>${m.san}</b>: ${line.notes[step]} ${speakButton(line.notes[step])}`);
+        // Chế độ Học: bé vừa nghe giải thích rồi, chỉ cần khen. Chế độ Kiểm tra: khen và giảng lại lý do.
+        Media.stopSpeaking();
+        say(learn ? 'Đúng rồi!' : `Đúng rồi! ${line.notes[step]}`);
         step++;
         advance();
         return;
@@ -709,14 +761,23 @@
       board.flash('bad');
       Media.play('bad');
       feedback(ui, 'bad', `Trong bộ khai cuộc của mình, ở đây ta đi nước khác. Thử lại nhé!${wrong >= 2 ? `<br>Gợi ý: quân ở ô <b>${e.from}</b>.` : ''}`);
-      if (wrong >= 2) board.setHint(e.from);
+      Media.stopSpeaking();
+      say('Trong bộ khai cuộc của mình, ở đây ta đi nước khác. Thử lại nhé!');
+      if (wrong >= 2) { say(`Gợi ý: hãy để ý quân ở ô ${e.from}.`); board.setHint(e.from); }
       else board.render();
     }
 
     setPrompt(ui, learn
       ? `👀 Học thế khai cuộc: <b>${line.title}</b>. Con cầm ${player === 'w' ? 'Trắng' : 'Đen'}, làm theo hướng dẫn.`
       : `🧪 Kiểm tra: <b>${line.title}</b>. Con cầm ${player === 'w' ? 'Trắng' : 'Đen'}. Hãy tự đi đúng các nước đã học!`);
+    if (learn) say(`Ý tưởng chính: ${line.idea}`);
     advance();
+  }
+
+  // Câu đọc to của bài Lichess: bỏ số độ khó để chỉ có vài mẫu câu, tất cả đều có bản thu sẵn.
+  function puzzleSpeech(ex, player) {
+    const n = (ex.themes.match(/mateIn(\d)/) || [])[1];
+    return `${n ? `Chiếu hết trong ${n} nước!` : 'Tìm nước tốt nhất!'} Con cầm quân ${player === 'w' ? 'Trắng' : 'Đen'}.`;
   }
 
   function puzzlePrompt(ex, player) {
@@ -769,7 +830,9 @@
       if (success) {
         board.flash('good');
         setTimeout(() => Media.play('good'), 120);
-        feedback(ui, 'good', `${pick(PRAISE)} ${game.isCheckmate() ? 'Chiếu hết!' : ''}<br>${change}`);
+        const praise = pick(PRAISE);
+        feedback(ui, 'good', `${praise} ${game.isCheckmate() ? 'Chiếu hết!' : ''}<br>${change}`);
+        sayPraise(praise);
         ctx.solved(wrong === 0 && !usedHint);
       } else {
         feedback(ui, 'info', `Đây là lời giải. Lần sau con sẽ tìm ra! 💪<br>${change}`);
@@ -840,7 +903,7 @@
       });
     }
 
-    setPrompt(ui, puzzlePrompt(ex, player));
+    setPrompt(ui, puzzlePrompt(ex, player), puzzleSpeech(ex, player));
     ui.actions.innerHTML = '<button class="btn" id="hintBtn">💡 Gợi ý</button>';
     document.getElementById('hintBtn').addEventListener('click', () => {
       if (done || game.turn() !== player) return;
@@ -902,7 +965,9 @@
           board.locked = true;
           board.flash('good');
           setTimeout(() => Media.play('good'), 120);
-          feedback(ui, 'good', `${pick(PRAISE)} ${ex.type === 'mate1' ? 'Chiếu hết!' : ''}`);
+          const praise = pick(PRAISE);
+          feedback(ui, 'good', `${praise} ${ex.type === 'mate1' ? 'Chiếu hết!' : ''}`);
+          sayPraise(praise, ex.explain);
           explainSingle(uci);
           ctx.solved(wrong === 0 && !usedHint);
           return;
@@ -921,13 +986,17 @@
         setTimeout(() => {
           game.undo();
           board.locked = false;
-          board.setLastMove(null);
+          board.setLastMove(...startLast);
           if (wrong >= 2) board.setHint(ex.hint || solution.from);
           else board.render();
           if (wrong >= 3) showSolveButton();
         }, 1100);
     }
 
+    // Thế cờ có ô bắt tốt qua đường: tô nước tốt vừa đi 2 ô để bé thấy rõ.
+    const startLast = epLastMove(ex.fen);
+    board.setLastMove(...startLast);
+    board.render();
     setPrompt(ui, `${ex.prompt} <small>(${sideText(game)})</small>`);
     ui.actions.innerHTML = '<button class="btn" id="hintBtn">💡 Gợi ý</button>';
     document.getElementById('hintBtn').addEventListener('click', () => {
@@ -1151,11 +1220,109 @@
               ${ratingLine(ratingBefore)}
               <div class="row">
                 <button class="btn primary" data-go="practice">🔁 Luyện thêm</button>
-                <button class="btn" data-go="home">🗺️ Về lộ trình</button>
+                <button class="btn" data-go="train">⚔️ Luyện theo đòn</button>
               </div>
             </div>
           </div>`);
         bindNav();
+        celebrate();
+        Media.play('win');
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Luyện theo từng đòn chiến thuật                                      */
+  /* ------------------------------------------------------------------ */
+
+  // Mỗi đòn là một gói bài Lichess; bé chọn đòn muốn luyện, máy chọn bài vừa sức.
+  const TACTICS = [
+    { pack: 'hanging', icon: '🍒', title: 'Ăn quân bị treo', tip: 'Quân nào không được bảo vệ? Ăn nó!' },
+    { pack: 'mate1', icon: '⚡', title: 'Chiếu hết 1 nước', tip: 'Tìm nước chiếu mà vua không chạy được.' },
+    { pack: 'fork', icon: '🍴', title: 'Chĩa đôi', tip: 'Một quân tấn công hai quân cùng lúc.' },
+    { pack: 'pinskewer', icon: '📌', title: 'Ghim và xiên', tip: 'Quân phía trước không dám chạy vì quân to phía sau.' },
+    { pack: 'discovered', icon: '💥', title: 'Tấn công phát hiện', tip: 'Dời một quân đi để quân phía sau tấn công.' },
+    { pack: 'deflection', icon: '🧲', title: 'Lôi kéo, đánh lạc hướng', tip: 'Kéo quân phòng thủ ra khỏi chỗ của nó.' },
+    { pack: 'defender', icon: '🛡️', title: 'Diệt quân phòng thủ, bẫy quân', tip: 'Ăn quân đang bảo vệ, hoặc nhốt quân không cho chạy.' },
+    { pack: 'sacrifice', icon: '🎁', title: 'Thí quân', tip: 'Cho đi một quân để chiếu hết hoặc lời to hơn.' },
+    { pack: 'xray', icon: '🔦', title: 'Xuyên quân, chặn đường', tip: 'Nhìn xuyên qua quân cờ theo đường thẳng, đường chéo.' },
+    { pack: 'quiet', icon: '🤫', title: 'Nước trung gian, nước yên lặng', tip: 'Nước bất ngờ: không chiếu, không ăn quân.' },
+    { pack: 'matepatterns', icon: '👑', title: 'Mẫu chiếu hết', tip: 'Chiếu hàng cuối, chiếu ngạt, và các mẫu nổi tiếng.' },
+    { pack: 'mate2', icon: '♛', title: 'Chiếu hết 2 nước', tip: 'Nước đầu thường là chiếu hoặc thí quân.' },
+    { pack: 'mate3', icon: '🏆', title: 'Chiếu hết 3 nước', tip: 'Tính trước 3 nước, ép vua từng bước.' },
+    { pack: 'attack', icon: '⚔️', title: 'Tấn công vua', tip: 'Dồn quân về phía vua đối thủ.' }
+  ].filter(t => (PUZZLES.packs[t.pack] || []).length);
+
+  /** Bài trong gói gần với điểm giải đố của bé: bài chưa làm trước, rồi bài từng sai; xếp dễ trước khó sau. */
+  function pickNearRating(packId, count) {
+    const seen = Progress.data.puzzleSeen;
+    const rating = Progress.data.puzzleRating;
+    const rank = p => (!(p[0] in seen) ? 0 : seen[p[0]] === 0 ? 1 : 2);
+    const list = (PUZZLES.packs[packId] || []).slice();
+    list.sort((a, b) => rank(a) - rank(b) || Math.abs(a[3] - rating) - Math.abs(b[3] - rating));
+    return list.slice(0, count).sort((a, b) => a[3] - b[3]).map(toPuzzle);
+  }
+
+  function renderTraining() {
+    if (!Progress.data.name) { renderWelcome(); return; }
+    const seen = Progress.data.puzzleSeen;
+    const due = Progress.dueReviews().length;
+    const cards = TACTICS.map((t, i) => {
+      const items = PUZZLES.packs[t.pack];
+      const solved = items.filter(p => seen[p[0]] > 0).length;
+      const pct = Math.round((solved / items.length) * 100);
+      return `
+        <button class="tactic" data-tactic="${i}">
+          <span class="tactic-icon">${t.icon}</span>
+          <b>${t.title}</b>
+          <small>${t.tip}</small>
+          <span class="tactic-bar"><i style="width:${pct}%"></i></span>
+          <small>Đã giải ${solved}/${items.length} bài</small>
+        </button>`;
+    }).join('');
+    show(`
+      ${header('train')}
+      <main class="training">
+        <div class="card hello">
+          <h1>🎯 Luyện tập</h1>
+          <p>Mỗi ngày làm một lượt <b>Luyện tập hôm nay</b> (ôn bài cũ và bài vừa sức${due ? `, hôm nay có <b>${due}</b> bài cần ôn` : ''}).
+             Muốn giỏi đòn nào thì luyện thêm đòn đó ở bên dưới.</p>
+          <button class="btn primary" data-go="practice">▶ Luyện tập hôm nay</button>
+        </div>
+        <div class="card">
+          <h2>⚔️ Luyện theo đòn chiến thuật</h2>
+          <p class="note">Mỗi lượt 10 bài vừa sức con. Giải càng nhiều, bài càng khó dần.</p>
+          <div class="tactics">${cards}</div>
+        </div>
+      </main>`);
+    bindNav();
+    app.querySelectorAll('[data-tactic]').forEach(b => b.addEventListener('click', () => startTactic(TACTICS[Number(b.dataset.tactic)])));
+  }
+
+  function startTactic(t) {
+    const chosen = pickNearRating(t.pack, 10);
+    const ratingBefore = Progress.data.puzzleRating;
+    runSession({
+      title: t.title,
+      icon: t.icon,
+      exercises: chosen,
+      onDone: (stars, mistakes) => {
+        show(`
+          <div class="intro">
+            <div class="card result">
+              <div class="big-icon">${t.icon}</div>
+              <h1>Xong lượt luyện ${t.title}!</h1>
+              <div class="result-stars">${starsHtml(stars)}</div>
+              <p>Con giải ${chosen.length} bài, sai ${mistakes} lần.</p>
+              ${ratingLine(ratingBefore)}
+              <div class="row">
+                <button class="btn primary" id="again">🔁 Luyện tiếp đòn này</button>
+                <button class="btn" data-go="train">⚔️ Chọn đòn khác</button>
+              </div>
+            </div>
+          </div>`);
+        bindNav();
+        document.getElementById('again').addEventListener('click', () => startTactic(t));
         celebrate();
         Media.play('win');
       }
@@ -1186,6 +1353,7 @@
             return `
               <div class="line-card ${st.cls}">
                 <b>${l.title}</b>
+                <span class="line-idea-short">💡 ${l.idea}</span>
                 <small>${Math.ceil(plies / 2)} nước · ${st.label}</small>
                 <div class="row">
                   <button class="btn" data-learn="${l.id}">👀 Học</button>
@@ -1666,19 +1834,37 @@
     const current = Media.vietVoice();
     const rate = Progress.data.settings.voiceRate || 0.9;
     const options = voices.map(v => `<option value="${esc(v.name)}" ${current && v.name === current.name ? 'selected' : ''}>${esc(v.name)}${/natural|neural|online|premium|enhanced|google/i.test(v.name) ? ' ⭐' : ''}</option>`).join('');
+    const mode = Progress.data.settings.voiceMode === 'device' ? 'device' : 'recorded';
+    const aiName = /NamMinh/.test(Media.recordedVoice) ? 'NamMinh, giọng nam' : 'HoaiMy, giọng nữ';
     return `
       <div class="voice-box">
+        ${Media.hasRecorded ? `
+          <label class="check">Kiểu giọng: <select id="voiceMode">
+            <option value="recorded" ${mode === 'recorded' ? 'selected' : ''}>🎙️ Giọng AI thu sẵn (${aiName}) – tự nhiên nhất</option>
+            <option value="device" ${mode === 'device' ? 'selected' : ''}>📱 Giọng của máy</option>
+          </select></label>
+          <p class="note">Lời giảng, đề bài, lời khen và khai cuộc dùng giọng AI thu sẵn, nghe được cả khi mất mạng.
+             Lời giải thích tự động (thay đổi theo từng ván) dùng giọng của máy chọn bên dưới.</p>` : ''}
         ${voices.length ? `
-          <label class="check">Giọng đọc: <select id="voiceSelect">${options}</select></label>
-          <label class="check">Tốc độ: <input type="range" id="voiceRate" min="0.7" max="1.2" step="0.05" value="${rate}"> <span id="rateText">${rate.toFixed(2)}×</span></label>
-          <button class="btn" id="voiceTest">🔊 Nghe thử</button>` : ''}
-        <p class="note">💡 ${voiceTip()} Giọng có dấu ⭐ thường tự nhiên hơn.</p>
+          <label class="check">Giọng của máy: <select id="voiceSelect">${options}</select></label>
+          <label class="check">Tốc độ: <input type="range" id="voiceRate" min="0.7" max="1.2" step="0.05" value="${rate}"> <span id="rateText">${rate.toFixed(2)}×</span></label>` : ''}
+        ${voices.length || Media.hasRecorded ? '<button class="btn" id="voiceTest">🔊 Nghe thử</button>' : ''}
+        <p class="note">💡 Giọng của máy: ${voiceTip()} Giọng có dấu ⭐ thường tự nhiên hơn.</p>
       </div>`;
   }
 
   function bindVoiceSettings() {
+    const modeSel = document.getElementById('voiceMode');
+    if (modeSel) modeSel.addEventListener('change', () => {
+      Progress.setSetting('voiceMode', modeSel.value);
+      Media.preview(document.getElementById('voiceSelect')?.value, Progress.data.settings.voiceRate || 0.9);
+    });
     const select = document.getElementById('voiceSelect');
-    if (!select) return;
+    if (!select) {
+      const test = document.getElementById('voiceTest');
+      if (test) test.addEventListener('click', () => Media.preview(null, 0.9));
+      return;
+    }
     const rate = document.getElementById('voiceRate');
     select.addEventListener('change', () => { Progress.setSetting('voiceName', select.value); Media.preview(select.value, Number(rate.value)); });
     rate.addEventListener('input', () => { document.getElementById('rateText').textContent = Number(rate.value).toFixed(2) + '×'; });
@@ -1867,9 +2053,15 @@
   const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let installPrompt = null; // Android/Chrome: sự kiện cài đặt để gọi khi bé/phụ huynh bấm nút
 
+  // iPhone/iPad bỏ qua "user-scalable=no": chặn thêm cử chỉ chụm hai ngón để màn hình không bị phóng to khi bé chơi.
+  ['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').catch(e => console.warn('Không đăng ký được bộ nhớ offline', e));
+    // Tải ngầm các bản thu giọng AI để nghe được cả khi mất mạng.
+    navigator.serviceWorker.ready.then(reg => { if (reg.active) reg.active.postMessage('cache-audio'); });
     // Có bản mới (không phải lần cài đầu tiên): tải lại để dùng ngay.
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); });
   }

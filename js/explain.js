@@ -46,6 +46,8 @@
   function baseText(m) {
     if (m.flags.includes('k')) return 'Nhập thành cánh vua';
     if (m.flags.includes('q')) return 'Nhập thành cánh hậu';
+    // Bắt tốt qua đường: tốt bị ăn không đứng ở ô đích mà ở ngay cạnh tốt vừa ăn.
+    if (m.flags.includes('e')) return `Bắt tốt qua đường: tốt đi chéo từ ${m.from} đến ${m.to} và ăn tốt ở ${m.to[0]}${m.from[1]}`;
     let s = m.captured
       ? `${cap(NAME[m.piece])} ăn ${NAME[m.captured]} ở ${m.to}`
       : `${cap(NAME[m.piece])} đi đến ${m.to}`;

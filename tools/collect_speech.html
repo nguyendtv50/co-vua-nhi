@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><title>Thu thập câu cần thu âm</title></head>
+<body>
+  <!-- Trang công cụ: tools/build_audio.py mở trang này bằng Edge ẩn để lấy danh sách câu cần thu âm.
+       Dùng chính code của phần mềm (Media.prepareSpeech, Media.sentences) để câu thu âm khớp tuyệt đối. -->
+  <div id="app" hidden></div>
+  <script src="../vendor/chess.global.js"></script>
+  <script src="../js/curriculum.js"></script>
+  <script src="../js/openings.js"></script>
+  <script src="../js/progress.js"></script>
+  <script src="../js/media.js"></script>
+  <script src="../js/bot.js"></script>
+  <script src="../js/board.js"></script>
+  <script src="../js/explain.js"></script>
+  <script src="../js/engine.js"></script>
+  <script src="../js/app.js"></script>
+  <script>
+    (function () {
+      const S = window.CoVuaNhiSpeech;
+      const side = fen => (new Chess(fen).turn() === 'w' ? 'Trắng đi trước' : 'Đen đi trước');
+      const raw = [];
+
+      for (const u of CURRICULUM.units) {
+        raw.push(u.intro.join(' '));
+        for (const ex of u.exercises) {
+          if (ex.type === 'quiz') raw.push(ex.question);
+          if (ex.type === 'move' || ex.type === 'mate1') raw.push(`${ex.prompt} (${side(ex.fen)})`);
+          if (ex.type === 'gen') raw.push(`${ex.prompt} (Trắng đi trước)`);
+          if (ex.type === 'find' || ex.type === 'drill') raw.push(ex.prompt);
+          if (ex.explain) raw.push(ex.explain);
+        }
+      }
+      raw.push(...S.PRAISE, ...S.ENCOURAGE);
+      for (const p of ['w', 'b']) {
+        for (const t of ['', 'mateIn1', 'mateIn2', 'mateIn3']) raw.push(S.puzzleSpeech(t, p));
+      }
+      // Thầy giảng khai cuộc (khớp với lineExercise trong js/app.js).
+      raw.push('Đúng rồi!', 'Trong bộ khai cuộc của mình, ở đây ta đi nước khác. Thử lại nhé!',
+        'Con đã đi hết thế khai cuộc! Lần sau hãy thử chế độ Kiểm tra, tự nhớ các nước nhé.',
+        'Thuộc lắm! Không sai nước nào.');
+      for (const rep of OPENINGS.repertoires) {
+        raw.push(rep.intro.join(' '));
+        const color = rep.color === 'w' ? 'Trắng' : 'Đen';
+        for (const line of rep.lines) {
+          raw.push(`👀 Học thế khai cuộc: ${line.title}. Con cầm ${color}, làm theo hướng dẫn.`);
+          raw.push(`🧪 Kiểm tra: ${line.title}. Con cầm ${color}. Hãy tự đi đúng các nước đã học!`);
+          raw.push(`Ý tưởng chính: ${line.idea}`, `Mẹo nhớ. ${line.tips.join(' ')}`);
+          const g = new Chess();
+          line.moves.split(' ').forEach((san, i) => {
+            const who = g.turn() === rep.color ? 'player' : 'opponent';
+            const m = g.move(san);
+            raw.push(S.openingSpeech(who, m.san, line.notes[i]));
+            if (who === 'player') raw.push(`Đúng rồi! ${line.notes[i]}`, `Gợi ý: hãy để ý quân ở ô ${m.from}.`);
+          });
+        }
+      }
+
+      const seen = new Set();
+      const b64 = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+      for (const text of raw) {
+        for (const sentence of Media.sentences(Media.prepareSpeech(text))) {
+          if (seen.has(sentence)) continue;
+          seen.add(sentence);
+          console.log('SPEECH ' + Media.clipKey(sentence) + ' ' + b64(sentence));
+        }
+      }
+      console.log('SPEECH_DONE ' + seen.size);
+    })();
+  </script>
+</body>
+</html>

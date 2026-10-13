@@ -62,7 +62,8 @@
   }
 
   function canSpeak() {
-    return !!vietVoice();
+    const recorded = window.AUDIO_CLIPS && Object.keys(window.AUDIO_CLIPS.clips || {}).length > 0;
+    return recorded || !!vietVoice();
   }
 
   /* ---------------- Chuẩn bị câu đọc ---------------- */
@@ -106,6 +107,92 @@
     return text.split(/(?<=[.!?…:;])\s+/).map(s => s.trim()).filter(s => /[\p{L}\d]/u.test(s));
   }
 
+  /* ---------------- Giọng AI thu sẵn ---------------- */
+
+  // audio/<mã>.mp3: mỗi câu cố định (lời giảng, đề bài, giải thích soạn sẵn) được thu sẵn bằng giọng AI.
+  // Mã = FNV-1a 32 bit của câu (UTF-8), tools/build_audio.py tính giống hệt.
+  const CLIPS = (window.AUDIO_CLIPS && window.AUDIO_CLIPS.clips) || {};
+
+  function clipKey(sentence) {
+    let h = 0x811c9dc5;
+    for (const b of new TextEncoder().encode(sentence)) {
+      h ^= b;
+      h = Math.imul(h, 0x01000193) >>>0;
+    }
+    return h.toString(16).padStart(8, '0');
+  }
+
+  function useRecorded() {
+    return Progress.data.settings.voiceMode !== 'device' && Object.keys(CLIPS).length > 0;
+  }
+
+  // Một thẻ <audio> dùng chung: iPhone/iPad chỉ cho phát âm thanh sau khi người dùng chạm,
+  // và một thẻ đã được "mở khóa" thì phát tiếp được các câu sau.
+  const player = typeof Audio !== 'undefined' ? new Audio() : null;
+  let queue = [];
+  let speaking = false;
+  let session = 0;
+
+  let idleWaiters = [];
+  function notifyIdle() {
+    const waiters = idleWaiters;
+    idleWaiters = [];
+    waiters.forEach(fn => fn());
+  }
+
+  /** Chờ đến khi đọc xong (tối đa maxMs), để bàn cờ "đợi thầy giảng xong" rồi mới đi tiếp. */
+  function whenIdle(maxMs = 15000) {
+    const busy = speaking || ('speechSynthesis' in window && (speechSynthesis.speaking || speechSynthesis.pending));
+    if (!busy) return Promise.resolve();
+    return new Promise(resolve => {
+      const timer = setTimeout(resolve, maxMs);
+      idleWaiters.push(() => { clearTimeout(timer); resolve(); });
+      // Giọng của máy (không qua hàng đợi): kiểm tra định kỳ.
+      const poll = setInterval(() => {
+        if (!speaking && !(speechSynthesis.speaking || speechSynthesis.pending)) { clearInterval(poll); clearTimeout(timer); resolve(); }
+      }, 250);
+    });
+  }
+
+  function playNext(id) {
+    if (id !== session) return;
+    const item = queue.shift();
+    if (!item) { speaking = false; notifyIdle(); return; }
+    const done = () => playNext(id);
+    if (item.clip && player) {
+      player.onended = done;
+      player.onerror = () => speakDevice(item.text, done); // thiếu file: đọc bằng giọng máy
+      player.src = `audio/${item.clip}.mp3`;
+      player.playbackRate = Progress.data.settings.voiceRate ? Math.min(1.15, Progress.data.settings.voiceRate / 0.9) : 1;
+      const p = player.play();
+      if (p && p.catch) p.catch(() => speakDevice(item.text, done));
+    } else {
+      speakDevice(item.text, done);
+    }
+  }
+
+  function speakDevice(text, done) {
+    const voice = vietVoice();
+    if (!voice) { done(); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.voice = voice;
+    u.lang = voice.lang;
+    u.rate = Progress.data.settings.voiceRate || 0.9;
+    u.pitch = 1.05;
+    u.onend = done;
+    u.onerror = done;
+    speechSynthesis.speak(u);
+  }
+
+  function stopAll() {
+    session++;
+    queue = [];
+    speaking = false;
+    notifyIdle();
+    if (player) { player.onended = null; player.onerror = null; player.pause(); }
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  }
+
   function speakWith(text, voice, rate) {
     speechSynthesis.cancel();
     for (const part of sentences(prepareSpeech(text))) {
@@ -118,20 +205,42 @@
     }
   }
 
-  function speak(text) {
-    const voice = vietVoice();
-    if (!voice || !Progress.data.settings.voice) return;
-    speakWith(text, voice, Progress.data.settings.voiceRate || 0.9);
+  /** Đọc to: câu nào có bản thu sẵn thì phát bản thu, còn lại dùng giọng của máy. */
+  // Mỗi câu: phát bản thu sẵn nếu có (và đang chọn giọng AI), không thì đọc bằng giọng của máy.
+  function toItems(text) {
+    const rec = useRecorded();
+    return sentences(prepareSpeech(text)).map(t => ({ text: t, clip: rec && CLIPS[clipKey(t)] ? clipKey(t) : null }));
+  }
+
+  function speak(text, force) {
+    if (!Progress.data.settings.voice && !force) return;
+    stopAll();
+    queue = toItems(text);
+    if (!queue.length) return;
+    speaking = true;
+    playNext(session);
+  }
+
+  /** Đọc nối tiếp sau câu đang đọc (không ngắt), vd. thầy giảng từng nước khai cuộc. */
+  function speakAfter(text) {
+    if (!Progress.data.settings.voice) return;
+    queue.push(...toItems(text));
+    if (!speaking && queue.length) { speaking = true; playNext(session); }
   }
 
   /** Nghe thử một giọng (dùng ở trang Phụ huynh), kể cả khi đang tắt tự đọc. */
   function preview(name, rate) {
+    if (useRecorded()) {
+      // Câu mẫu lấy từ bài học đầu tiên nên đã có bản thu sẵn.
+      speak('Chào con! Trước khi học bài mới, mình cùng ôn lại vài luật đặc biệt của cờ vua nhé.', true);
+      return;
+    }
     const voice = vietVoices().find(v => v.name === name) || vietVoice();
     if (voice) speakWith('Chào con! Mã đi đến ép ba, tấn công tốt e năm. Nước đi Nxf7+ là mã ăn f7 và chiếu vua.', voice, rate);
   }
 
   function stopSpeaking() {
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    stopAll();
   }
 
   if ('speechSynthesis' in window) {
@@ -139,5 +248,10 @@
     speechSynthesis.addEventListener?.('voiceschanged', () => document.dispatchEvent(new Event('voices-ready')));
   }
 
-  window.Media = { play, speak, stopSpeaking, canSpeak, vietVoices, vietVoice, preview, prepareSpeech };
+  window.Media = {
+    play, speak, speakAfter, whenIdle, stopSpeaking, canSpeak, vietVoices, vietVoice, preview,
+    prepareSpeech, sentences, clipKey,
+    get hasRecorded() { return Object.keys(CLIPS).length > 0; },
+    get recordedVoice() { return (window.AUDIO_CLIPS && window.AUDIO_CLIPS.voice) || ''; }
+  };
 })();

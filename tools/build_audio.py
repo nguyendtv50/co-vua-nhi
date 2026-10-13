@@ -2,6 +2,11 @@
 
 Chạy:  python tools/build_audio.py            (giọng nữ HoaiMy)
        python tools/build_audio.py NamMinh    (giọng nam)
+
+Thu song song nhiều tiến trình (nhanh hơn):
+       python tools/build_audio.py --plan 4          chia các câu chưa thu thành audio/_shard1.json … _shard4.json
+       python tools/build_audio.py --shard audio/_shard1.json   (chạy mỗi phần ở một cửa sổ/tiến trình riêng)
+       python tools/build_audio.py --finish          xóa file thừa, ghi js/audio-index.js
 Cần:   pip install edge-tts ; Microsoft Edge ; có mạng.
 
 Các bước:
@@ -68,14 +73,26 @@ async def synthesize(items, voice):
         async with sem:
             for attempt in range(3):
                 try:
-                    await edge_tts.Communicate(text, voice, rate=RATE).save(str(AUDIO / f"{key}.mp3"))
+                    # Có hạn chờ: một câu bị treo mạng không làm đứng cả lượt thu.
+                    tmp = AUDIO / f"{key}.part"
+                    await asyncio.wait_for(edge_tts.Communicate(text, voice, rate=RATE).save(str(tmp)), 45)
+                    tmp.replace(AUDIO / f"{key}.mp3")
                     return
                 except Exception as exc:  # mạng chập chờn: thử lại
                     err = exc
                     await asyncio.sleep(2 * (attempt + 1))
             failed.append((key, text, err))
 
-    await asyncio.gather(*(one(k, t) for k, t in items))
+    done = 0
+
+    async def tracked(k, t):
+        nonlocal done
+        await one(k, t)
+        done += 1
+        if done % 25 == 0:
+            print(f"  đã thu {done}/{len(items)}", flush=True)
+
+    await asyncio.gather(*(tracked(k, t) for k, t in items))
     return failed
 
 
@@ -99,7 +116,13 @@ def main(voice_name):
     for key, text, err in failed:
         print(f"  LỖI {key}: {text[:60]} ({err})")
 
+    finish(sentences, voice, failed)
+
+
+def finish(sentences, voice, failed=()):
     removed = 0
+    for f in AUDIO.glob("*.part"):
+        f.unlink()
     for f in AUDIO.glob("*.mp3"):
         if f.stem not in sentences:
             f.unlink()
@@ -116,6 +139,45 @@ def main(voice_name):
         sys.exit(1)
 
 
+def plan(parts, voice):
+    AUDIO.mkdir(exist_ok=True)
+    sentences = collect_sentences()
+    todo = [(k, t) for k, t in sentences.items() if not (AUDIO / f"{k}.mp3").exists()]
+    for i in range(parts):
+        chunk = todo[i::parts]
+        (AUDIO / f"_shard{i + 1}.json").write_text(
+            json.dumps({"voice": voice, "items": chunk}, ensure_ascii=False), encoding="utf-8")
+    (AUDIO / "_sentences.json").write_text(json.dumps(sentences, ensure_ascii=False), encoding="utf-8")
+    print(f"{len(sentences)} câu, {len(todo)} câu cần thu mới, chia thành {parts} phần.")
+
+
+def run_shard(path):
+    data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    items = [(k, t) for k, t in data["items"] if not (AUDIO / f"{k}.mp3").exists()]
+    print(f"{path}: {len(items)} câu cần thu…", flush=True)
+    failed = asyncio.run(synthesize(items, data["voice"]))
+    for key, text, err in failed:
+        print(f"  LỖI {key}: {text[:60]} ({err})")
+    print(f"Xong phần {path}: {len(items) - len(failed)} câu thu được, {len(failed)} lỗi.")
+    sys.exit(1 if failed else 0)
+
+
+def finish_all(voice):
+    sentences = json.loads((AUDIO / "_sentences.json").read_text(encoding="utf-8"))
+    for f in AUDIO.glob("_*.json"):
+        f.unlink()
+    missing = [k for k in sentences if not (AUDIO / f"{k}.mp3").exists()]
+    finish(sentences, voice, missing)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    main(sys.argv[1] if len(sys.argv) > 1 else "HoaiMy")
+    args = sys.argv[1:]
+    if args[:1] == ["--plan"]:
+        plan(int(args[1]), "vi-VN-HoaiMyNeural")
+    elif args[:1] == ["--shard"]:
+        run_shard(args[1])
+    elif args[:1] == ["--finish"]:
+        finish_all("vi-VN-HoaiMyNeural")
+    else:
+        main(args[0] if args else "HoaiMy")
